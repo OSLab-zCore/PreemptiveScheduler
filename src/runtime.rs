@@ -113,16 +113,16 @@ lazy_static! {
 }
 
 // // obtain a task from other cpu.
-// pub(crate) fn steal_task_from_other_cpu() -> Option<(Arc<Task>, Waker, DroperRef)> {
-//     let runtime = GLOBAL_RUNTIME
-//         .iter()
-//         .max_by_key(|runtime| runtime.lock().task_num())
-//         .unwrap();
-//     let runtime = runtime.lock();
-//     debug!("most_task_cpu_id:{}", runtime.cpu_id());
-//     // TODO: ???, SAGETY?
-//     runtime.task_collection.take_task()
-// }
+pub(crate) fn steal_task_from_other_cpu() -> Option<(Arc<Task>, Waker, DroperRef)> {
+    let runtime = GLOBAL_RUNTIME
+        .iter()
+        .max_by_key(|runtime| runtime.lock().task_num())
+        .unwrap();
+    let runtime = runtime.lock();
+    debug!("most_task_cpu_id:{}", runtime.cpu_id());
+    // TODO: ???, SAGETY?
+    runtime.task_collection.take_task()
+}
 
 // per-cpu scheduler.
 pub fn run_until_idle() -> bool {

@@ -19,7 +19,7 @@ use {
 use core::fmt::{Debug, Formatter, Result};
 
 // #[allow(unused)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq,· Eq)]
 pub enum TaskState {
     BLOCKED,
     RUNNABLE,
