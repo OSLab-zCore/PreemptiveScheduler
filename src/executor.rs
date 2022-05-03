@@ -95,18 +95,20 @@ impl Executor {
                 let waker = woke::waker_ref(&waker);
                 let mut cx = Context::from_waker(&waker);
                 self.is_running_future = true;
+                info!("is running future = true");
                 crate::arch::intr_on();
                 let ret = task.poll(&mut cx);
                 crate::arch::intr_off();
+                info!("is running future = false");
                 self.is_running_future = false;
-
                 match ret {
                     Poll::Ready(()) => {
                         droper.drop_by_ref();
                     }
-                    Poll::Pending => {}
-                }
-
+                    Poll::Pending => {
+                        // Do Nothing
+                    }
+                };
                 if let ExecutorState::WEAK = self.state {
                     self.state = ExecutorState::KILLED;
                     return;
