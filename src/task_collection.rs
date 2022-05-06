@@ -185,7 +185,7 @@ impl TaskCollection {
                     let droper = waker.clone();
 
                     self.remove_task(key);
-                    self.priority_add_task(priority - 1, task.future.lock());
+                    self.priority_add_task(priority - 1, task.future.lock().as_mut());
 
                     Some((key, task, waker, droper)) // key will not be used
                 } else {
