@@ -135,7 +135,7 @@ pub fn run_until_idle() -> bool {
         runtime.current_executor = Some(runtime.strong_executor.clone());
         // 释放保护 global_runtime 的锁
         drop(runtime);
-        debug!("run strong executor");
+        // debug!("run strong executor");
         switch(runtime_cx, executor_cx);
         // 该函数返回说明当前 strong_executor 执行的 future 超时或者主动 yield 了,
         // 需要重新创建一个 executor 执行后续的 future, 并且将
@@ -215,7 +215,7 @@ pub fn spawn_task(
 /// switch to currrent cpu runtime that would create a new executor to run other
 /// coroutines.
 pub fn handle_timeout() {
-    debug!("handle timeout");
+    // debug!("handle timeout");
     sched_yield()
 }
 
