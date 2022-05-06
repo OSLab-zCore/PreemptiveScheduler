@@ -120,7 +120,7 @@ pub(crate) fn steal_task_from_other_cpu() -> Option<(Arc<Task>, Waker, DroperRef
         .unwrap();
     let runtime = runtime.lock();
     debug!("most_task_cpu_id:{}", runtime.cpu_id());
-    // TODO: ???, SAGETY?
+    // TODO: SAFETY
     runtime.task_collection.take_task()
 }
 
@@ -180,7 +180,14 @@ pub fn run_until_idle() -> bool {
 }
 
 pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
-    spawn_task(future, None, Some(crate::arch::cpu_id() as _));
+    let cpu_id = GLOBAL_RUNTIME
+        .iter()
+        .min_by_key(|runtime| runtime.lock().task_num())
+        .unwrap()
+        .lock()
+        .cpu_id();
+    spawn_task(future, None, Some(cpu_id as _));
+    // spawn_task(future, None, Some(crate::arch::cpu_id() as _));
 }
 
 /// Spawn a coroutine with `priority` and `cpu_id`

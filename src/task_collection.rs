@@ -183,7 +183,11 @@ impl TaskCollection {
                     let task = inner.slab.get(unmask_priority(key)).unwrap().clone();
                     let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
                     let droper = waker.clone();
-                    Some((key, task, waker, droper))
+
+                    self.remove_task(key);
+                    self.priority_add_task(priority - 1, task.future);
+                    
+                    Some((key, task, waker, droper)) // key will not be used
                 } else {
                     None
                 }
