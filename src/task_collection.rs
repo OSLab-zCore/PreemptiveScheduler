@@ -184,8 +184,8 @@ impl TaskCollection {
                     let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
                     let droper = waker.clone();
 
-                    self.remove_task(key);
-                    self.priority_add_task(priority - 1, task.future.get_mut());
+                    // self.remove_task(key);
+                    // self.priority_add_task(priority - 1, task.future.lock().as_mut());
 
                     Some((key, task, waker, droper)) // key will not be used
                 } else {
