@@ -95,11 +95,12 @@ impl Executor {
                 let waker = woke::waker_ref(&waker);
                 let mut cx = Context::from_waker(&waker);
                 self.is_running_future = true;
-                info!("is running future = true");
+                warn!("is running future = true");
+                warn!("cpu_id: {}", crate::arch::cpu_id() as usize);
                 crate::arch::intr_on();
                 let ret = task.poll(&mut cx);
                 crate::arch::intr_off();
-                info!("is running future = false");
+                warn!("is running future = false");
                 self.is_running_future = false;
                 match ret {
                     Poll::Ready(()) => {
