@@ -126,7 +126,7 @@ pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, D
 
 // per-cpu scheduler.
 pub fn run_until_idle() -> bool {
-    debug!("GLOBAL_RUNTIME.run()");
+    // debug!("GLOBAL_RUNTIME.run()");
     loop {
         let mut runtime = get_current_runtime();
         let runtime_cx = runtime.get_context();
