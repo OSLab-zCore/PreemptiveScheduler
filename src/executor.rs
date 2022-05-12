@@ -112,6 +112,7 @@ impl Executor {
                 };
                 if let ExecutorState::WEAK = self.state {
                     self.state = ExecutorState::KILLED;
+                    warn!("marked as KILLED");
                     return;
                 }
             } else {

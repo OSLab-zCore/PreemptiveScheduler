@@ -163,6 +163,7 @@ pub fn run_until_idle() -> bool {
         for idx in 0..runtime.weak_executors.len() {
             if let Some(executor) = &runtime.weak_executors[idx] {
                 if executor.killed() {
+                    warn!("I am killed");
                     continue;
                 }
                 let executor = executor.clone();
