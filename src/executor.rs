@@ -102,11 +102,6 @@ impl Executor {
                 crate::arch::intr_off();
                 warn!("is running future = false");
                 self.is_running_future = false;
-                if let ExecutorState::WEAK = self.state {
-                    self.state = ExecutorState::KILLED;
-                    warn!("marked as KILLED");
-                    return;
-                }
                 match ret {
                     Poll::Ready(()) => {
                         droper.drop_by_ref();
@@ -115,6 +110,11 @@ impl Executor {
                         // Do Nothing
                     }
                 };
+                if let ExecutorState::WEAK = self.state {
+                    self.state = ExecutorState::KILLED;
+                    warn!("marked as KILLED");
+                    return;
+                }
             } else {
                 let runtime = crate::runtime::get_current_runtime();
                 let task_num = runtime.task_num();
