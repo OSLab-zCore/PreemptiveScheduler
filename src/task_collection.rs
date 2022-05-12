@@ -181,12 +181,11 @@ impl TaskCollection {
                     let (priority, page_idx, subpage_idx) = unpack_key(key);
                     let mut inner = self.get_mut_inner(priority);
                     let task = inner.slab.get(unmask_priority(key)).unwrap().clone();
-                    let new_task = inner.slab.get(unmask_priority(key)).unwrap().clone();
                     let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
                     let droper = waker.clone();
 
                     self.remove_task(key);
-                    self.priority_add_task(priority - 1, new_task.future.lock().as_mut());
+                    self.priority_add_task(priority - 1, task.future.get_mut());
 
                     Some((key, task, waker, droper)) // key will not be used
                 } else {
