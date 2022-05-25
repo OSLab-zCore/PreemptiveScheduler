@@ -1,4 +1,4 @@
-use crate::{executor::Executor, task_collection::*, waker_page::DroperRef};
+use crate::{executor::Executor, task_collection::*, waker_page::DroperRef, waker_page::WakerRef};
 
 #[cfg(target_arch = "x86_64")]
 use crate::context::Context;
@@ -113,7 +113,7 @@ lazy_static! {
 }
 
 // // obtain a task from other cpu.
-pub(crate) fn steal_task_from_other_cpu() -> Option<(Arc<Task>, Waker, DroperRef)> {
+pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
     let runtime = GLOBAL_RUNTIME
         .iter()
         .max_by_key(|runtime| runtime.lock().task_num())
