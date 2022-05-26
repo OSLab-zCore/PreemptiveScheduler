@@ -1,4 +1,8 @@
-use crate::{executor::Executor, task_collection::*, waker_page::{DroperRef, WakerRef}};
+use crate::{
+    executor::Executor,
+    task_collection::*,
+    waker_page::{DroperRef, WakerRef},
+};
 
 #[cfg(target_arch = "x86_64")]
 use crate::context::Context;
@@ -131,7 +135,7 @@ pub fn run_until_idle() -> bool {
         let mut runtime = get_current_runtime();
         let runtime_cx = runtime.get_context();
         let executor_cx = runtime.strong_executor.context.get_context();
-
+        debug!("switch idle -> {}", runtime.strong_executor.id());
         runtime.current_executor = Some(runtime.strong_executor.clone());
         // 释放保护 global_runtime 的锁
         drop(runtime);
@@ -167,6 +171,7 @@ pub fn run_until_idle() -> bool {
                 }
                 let executor = executor.clone();
                 let executor_ctx = executor.context.get_context();
+                debug!("switch idle -> {}", executor.id());
                 runtime.current_executor = Some(executor);
                 drop(runtime);
                 switch(runtime_cx as _, executor_ctx as _);
@@ -180,14 +185,9 @@ pub fn run_until_idle() -> bool {
 }
 
 pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
-    let cpu_id = GLOBAL_RUNTIME
-        .iter()
-        .min_by_key(|runtime| runtime.lock().task_num())
-        .unwrap()
-        .lock()
-        .cpu_id();
-    spawn_task(future, None, Some(cpu_id as _));
-    // spawn_task(future, None, Some(crate::arch::cpu_id() as _));
+    super::run_with_intr_saved_off! {
+        spawn_task(future, None, Some(crate::arch::cpu_id() as _))
+    }
 }
 
 /// Spawn a coroutine with `priority` and `cpu_id`
@@ -215,8 +215,11 @@ pub fn spawn_task(
 /// switch to currrent cpu runtime that would create a new executor to run other
 /// coroutines.
 pub fn handle_timeout() {
-    // debug!("handle timeout");
-    sched_yield()
+    // debug!("handle timeout {:?}", get_current_executor_id());
+    super::run_with_intr_saved_off! {
+        sched_yield()
+    }
+    // debug!("handle timeout over {:?}", get_current_executor_id());
 }
 
 /// 运行executor.run()
@@ -228,20 +231,18 @@ pub(crate) fn run_executor(executor_addr: usize) {
     let runtime = get_current_runtime();
     let executor_cx = p.context.get_context();
     let runtime_cx = runtime.get_context();
+    debug!("executor all done! switch {} -> idle", p.id());
     drop(runtime);
-    debug!("executor all done! return to runtime");
     switch(executor_cx as _, runtime_cx as _);
     unreachable!();
 }
 
 /// switch to runtime, which would select an appropriate executor to run.
 pub fn sched_yield() {
-    if crate::arch::intr_get() {
-        error!("intrrupt should be disabled when sched_yield");
-    }
     let runtime = get_current_runtime();
     if let Some(executor) = runtime.current_executor.as_ref() {
         let executor_cx = executor.context.get_context();
+        debug!("switch {} -> idle", executor.id());
         let runtime_cx = runtime.get_context();
         drop(runtime);
         switch(executor_cx, runtime_cx);
@@ -257,4 +258,13 @@ pub(crate) fn switch(from_ctx: usize, to_ctx: usize) {
 /// return runtime `MutexGuard` of current cpu.
 pub(crate) fn get_current_runtime() -> MutexGuard<'static, ExecutorRuntime> {
     GLOBAL_RUNTIME[crate::arch::cpu_id() as usize].lock()
+}
+
+pub fn get_current_executor_id() -> (usize, usize) {
+    let runtime = get_current_runtime();
+    if let Some(executor) = runtime.current_executor.as_ref() {
+        (executor.id(), executor.task_id())
+    } else {
+        (0, 0)
+    }
 }
