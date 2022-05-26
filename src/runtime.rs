@@ -188,6 +188,9 @@ pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
     super::run_with_intr_saved_off! {
         spawn_task(future, None, Some(crate::arch::cpu_id() as _))
     }
+    // super::run_with_intr_saved_off! {
+    //     spawn_task(future, None, None)
+    // }
 }
 
 /// Spawn a coroutine with `priority` and `cpu_id`
