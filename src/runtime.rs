@@ -146,6 +146,7 @@ pub fn run_until_idle() -> bool {
         // 新的 executor 作为 strong_executor，旧的 executor 添
         // 加到 weak_exector 中。
         runtime = get_current_runtime();
+        runtime.current_executor = None;
         if runtime.task_num() == 0 {
             return false;
         }
@@ -176,6 +177,7 @@ pub fn run_until_idle() -> bool {
                 drop(runtime);
                 switch(runtime_cx as _, executor_ctx as _);
                 runtime = get_current_runtime();
+                runtime.current_executor = None;
             }
         }
         if runtime.task_num() == 0 {
@@ -186,10 +188,10 @@ pub fn run_until_idle() -> bool {
 
 pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
     super::run_with_intr_saved_off! {
-        spawn_task(future, None, Some(crate::arch::cpu_id() as _))
+        spawn_task(future, None, None)
     }
     // super::run_with_intr_saved_off! {
-    //     spawn_task(future, None, None)
+    //     spawn_task(future, None, Some(crate::arch::cpu_id() as _))
     // }
 }
 
@@ -210,6 +212,23 @@ pub fn spawn_task(
             .iter()
             .min_by_key(|runtime| runtime.lock().task_num())
             .unwrap()
+        // warn!("now_cpu_id: {}", crate::arch::cpu_id());
+        // let mut min_task_num = usize::MAX;
+        // let mut cpu_id: usize = 0;
+        // for runtime in GLOBAL_RUNTIME.iter() {
+        //     let lock_runtime = runtime.lock();
+        //     warn!(
+        //         "cpu_id: {}, task_num: {}",
+        //         lock_runtime.cpu_id(),
+        //         lock_runtime.task_num()
+        //     );
+        //     if (min_task_num > lock_runtime.task_num()) {
+        //         min_task_num = lock_runtime.task_num();
+        //         cpu_id = lock_runtime.cpu_id() as _;
+        //     }
+        // }
+        // warn!("allocate_cpu_id: {}", cpu_id);
+        // &GLOBAL_RUNTIME[cpu_id]
     };
     runtime.lock().add_task(priority, future);
 }
