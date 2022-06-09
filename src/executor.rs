@@ -112,7 +112,7 @@ impl Executor {
                 debug!("back from future {}:{}", self.id(), task.id());
                 match ret {
                     Poll::Ready(()) => {
-                        debug!("task over id = {}", task.id());
+                        // error!("task over id = {}", task.id());
                         droper.drop_by_ref();
                     }
                     Poll::Pending => {

@@ -153,12 +153,14 @@ pub struct WakerRef {
 impl WakerRef {
     pub fn wake_by_ref(&self) {
         if !self.dropped.load(Ordering::SeqCst) {
+            // error!("wake future: {:?}", self.idx);
             self.page.notify(self.idx);
         }
     }
 
     pub fn drop_by_ref(&self) {
         if !self.dropped.swap(true, Ordering::SeqCst) {
+            // error!("drop future: {:?}", self.idx);
             self.page.mark_dropped(self.idx);
         }
     }

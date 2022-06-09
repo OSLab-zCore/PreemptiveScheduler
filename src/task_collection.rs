@@ -3,14 +3,15 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use bit_iter::BitIter;
-use core::cell::RefCell;
+// use core::cell::RefCell;
 use core::ops::{Generator, GeneratorState};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use spin::Mutex;
+use spin::MutexGuard;
 use unicycle::pin_slab::PinSlab;
 use {
     alloc::boxed::Box,
-    core::cell::RefMut,
+    // core::cell::RefMut,
     core::future::Future,
     core::pin::Pin,
     core::task::{Context, Poll},
@@ -69,6 +70,9 @@ impl Task {
         }
     }
     pub fn poll(&self, cx: &mut Context) -> Poll<()> {
+        if self.finish.load(Ordering::Relaxed) {
+            return Poll::Ready(());
+        }
         let mut f = self.future.lock();
         if self.inner.lock().intr_enable {
             crate::arch::intr_on();
@@ -135,7 +139,7 @@ impl FutureCollection {
 }
 
 pub struct TaskCollection {
-    future_collections: Vec<RefCell<FutureCollection>>,
+    future_collections: Vec<Mutex<FutureCollection>>,
     task_num: AtomicUsize,
     generator: Option<Mutex<Pin<Box<dyn Generator<Yield = Option<Key>, Return = ()>>>>>,
 }
@@ -152,7 +156,7 @@ impl TaskCollection {
         let mut tc = unsafe { Arc::get_mut_unchecked(&mut task_collection) };
         for priority in 0..MAX_PRIORITY {
             tc.future_collections
-                .push(RefCell::new(FutureCollection::new(priority)));
+                .push(Mutex::new(FutureCollection::new(priority)));
         }
         tc.generator = Some(Mutex::new(Box::pin(TaskCollection::generator(tc_clone))));
         task_collection
@@ -176,16 +180,14 @@ impl TaskCollection {
         future: F,
     ) -> Key {
         debug_assert!(priority == DEFAULT_PRIORITY);
-        let key = self.future_collections[priority]
-            .borrow_mut()
-            .insert(future);
+        let key = self.future_collections[priority].lock().insert(future);
         debug_assert!(key < TASK_NUM_PER_PRIORITY);
         self.task_num.fetch_add(1, Ordering::Relaxed);
         key | (priority << PRIORITY_SHIFT)
     }
 
-    fn get_mut_inner(&self, priority: usize) -> RefMut<'_, FutureCollection> {
-        self.future_collections[priority].borrow_mut()
+    fn get_mut_inner(&self, priority: usize) -> MutexGuard<'_, FutureCollection> {
+        self.future_collections[priority].lock()
     }
 
     pub fn task_num(&self) -> usize {
