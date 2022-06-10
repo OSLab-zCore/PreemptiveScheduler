@@ -6,7 +6,7 @@ use crate::{
 
 #[cfg(target_arch = "x86_64")]
 use crate::context::Context;
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 use crate::context::ContextData as Context;
 
 use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
@@ -36,7 +36,7 @@ pub struct ExecutorRuntime {
 
 impl ExecutorRuntime {
     pub fn new(cpu_id: u8) -> Self {
-        let task_collection = TaskCollection::new();
+        let task_collection = TaskCollection::new(cpu_id);
         let tc_clone = task_collection.clone();
         ExecutorRuntime {
             cpu_id,
@@ -94,6 +94,11 @@ impl ExecutorRuntime {
     fn get_context(&self) -> usize {
         self.context.get_context()
     }
+
+    #[cfg(target_arch = "aarch64")]
+    fn get_context(&self) -> usize {
+        &self.context as *const Context as usize
+    }
 }
 
 impl Drop for ExecutorRuntime {
@@ -117,21 +122,23 @@ lazy_static! {
     ];
 }
 
-// // obtain a task from other cpu.
+// obtain a task from other cpu.
 pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
     let runtime = GLOBAL_RUNTIME
         .iter()
         .max_by_key(|runtime| runtime.lock().task_num())
         .unwrap();
     let runtime = runtime.lock();
-    debug!("most_task_cpu_id:{}", runtime.cpu_id());
-    // TODO: SAFETY
-    runtime.task_collection.take_task()
+    if runtime.task_num() > 0 {
+        runtime.task_collection.take_task()
+    } else {
+        None
+    }
 }
 
 // per-cpu scheduler.
 pub fn run_until_idle() -> bool {
-    // debug!("GLOBAL_RUNTIME.run()");
+    debug!("GLOBAL_RUNTIME.run()");
     loop {
         let mut runtime = get_current_runtime();
         let runtime_cx = runtime.get_context();
@@ -140,7 +147,7 @@ pub fn run_until_idle() -> bool {
         runtime.current_executor = Some(runtime.strong_executor.clone());
         // 释放保护 global_runtime 的锁
         drop(runtime);
-        // debug!("run strong executor");
+        debug!("run strong executor");
         switch(runtime_cx, executor_cx);
         // 该函数返回说明当前 strong_executor 执行的 future 超时或者主动 yield 了,
         // 需要重新创建一个 executor 执行后续的 future, 并且将
@@ -148,12 +155,11 @@ pub fn run_until_idle() -> bool {
         // 加到 weak_exector 中。
         runtime = get_current_runtime();
         runtime.current_executor = None;
-        if runtime.task_num() == 0 {
+        if cfg!(feature = "baremetal-test") && runtime.task_num() == 0 {
             return false;
         }
         // 只有 strong_executor 主动 yield 时, 才会执行运行 weak_executor;
         if runtime.strong_executor.is_running_future() {
-            debug!("downgrage strong executor");
             runtime.downgrade_strong_executor();
             continue;
         }
@@ -181,19 +187,13 @@ pub fn run_until_idle() -> bool {
                 runtime.current_executor = None;
             }
         }
-        if runtime.task_num() == 0 {
-            return false;
-        }
     }
 }
 
 pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
     super::run_with_intr_saved_off! {
-        spawn_task(future, None, None)
+        spawn_task(future, None, None/*Some(crate::arch::cpu_id() as _)*/)
     }
-    // super::run_with_intr_saved_off! {
-    //     spawn_task(future, None, Some(crate::arch::cpu_id() as _))
-    // }
 }
 
 /// Spawn a coroutine with `priority` and `cpu_id`
@@ -213,23 +213,6 @@ pub fn spawn_task(
             .iter()
             .min_by_key(|runtime| runtime.lock().task_num())
             .unwrap()
-        // warn!("now_cpu_id: {}", crate::arch::cpu_id());
-        // let mut min_task_num = usize::MAX;
-        // let mut cpu_id: usize = 0;
-        // for runtime in GLOBAL_RUNTIME.iter() {
-        //     let lock_runtime = runtime.lock();
-        //     warn!(
-        //         "cpu_id: {}, task_num: {}",
-        //         lock_runtime.cpu_id(),
-        //         lock_runtime.task_num()
-        //     );
-        //     if (min_task_num > lock_runtime.task_num()) {
-        //         min_task_num = lock_runtime.task_num();
-        //         cpu_id = lock_runtime.cpu_id() as _;
-        //     }
-        // }
-        // warn!("allocate_cpu_id: {}", cpu_id);
-        // &GLOBAL_RUNTIME[cpu_id]
     };
     runtime.lock().add_task(priority, future);
 }
@@ -238,11 +221,10 @@ pub fn spawn_task(
 /// switch to currrent cpu runtime that would create a new executor to run other
 /// coroutines.
 pub fn handle_timeout() {
-    // debug!("handle timeout {:?}", get_current_executor_id());
+    debug!("handle kernel timeout");
     super::run_with_intr_saved_off! {
         sched_yield()
     }
-    // debug!("handle timeout over {:?}", get_current_executor_id());
 }
 
 /// 运行executor.run()

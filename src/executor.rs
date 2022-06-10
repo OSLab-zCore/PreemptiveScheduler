@@ -24,7 +24,7 @@ pub struct Executor {
     task_collection: Arc<TaskCollection>,
     stack_base: usize,
     pub context: ExecuterContext,
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     context_data: ContextData,
     task_id: usize,
     state: ExecutorState,
@@ -51,7 +51,7 @@ impl Executor {
             task_collection,
             stack_base,
             context: ExecuterContext::default(),
-            #[cfg(target_arch = "riscv64")]
+            #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
             context_data: ContextData::default(),
             task_id: 0,
             state: ExecutorState::UNUSED,
@@ -73,7 +73,7 @@ impl Executor {
         let mut stack_top = self.stack_base + STACK_SIZE;
         let self_addr = self as *const Self as usize;
         stack_top = unsafe { push_stack(stack_top, self_addr) };
-        #[cfg(target_arch = "riscv64")]
+        #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
         {
             self.context_data = ContextData::new(
                 executor_entry as *const () as usize,
@@ -102,17 +102,19 @@ impl Executor {
                 task_info = crate::runtime::steal_task_from_other_cpu();
             }
             if let Some((_key, task, waker_ref, droper)) = task_info {
-                let waker = Arc::new(waker_ref);
-                let waker = woke::waker_ref(&waker);
+                let waker_ref = Arc::new(waker_ref);
+                let waker = woke::waker_ref(&waker_ref);
                 let mut cx = Context::from_waker(&waker);
+                waker_ref.mark_borrowed(true);
                 self.task_id = task.id();
                 debug!("running future {}:{}", self.id(), task.id());
                 let ret = task.poll(&mut cx);
-                self.task_id = 0;
                 debug!("back from future {}:{}", self.id(), task.id());
+                self.task_id = 0;
+                waker_ref.mark_borrowed(false);
                 match ret {
                     Poll::Ready(()) => {
-                        // error!("task over id = {}", task.id());
+                        debug!("task over id = {}", task.id());
                         droper.drop_by_ref();
                     }
                     Poll::Pending => {
@@ -128,13 +130,16 @@ impl Executor {
                 let task_num = runtime.task_num();
                 let weak_executor = runtime.weak_executor_num();
                 drop(runtime);
-                if task_num == 0 || weak_executor != 0 {
-                    debug!("all done! return to runtime");
+                // TODO: some cores may exit by mistake when we have multi-cores
+                if cfg!(feature = "baremetal-test") && task_num == 0 {
+                    debug!("all done! exit and reboot");
+                    crate::runtime::sched_yield();
+                } else if weak_executor != 0 {
+                    debug!("return to runtime and run weak executor");
                     crate::runtime::sched_yield();
                 } else {
                     debug!("no other tasks, wait for interrupt");
                     crate::arch::wait_for_interrupt();
-                    debug!("wait for intrrupt over");
                 }
             }
         }
